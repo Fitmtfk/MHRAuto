@@ -1,0 +1,88 @@
+一.环境配置
+	1.配置tesseract环境（部分文件我会放在网盘里，或者自己去链接里下载）
+		（1）安装tesseract5.0 https://github.com/UB-Mannheim/tesseract/wiki 此处可以找到 installer for windows（我自己是用scoop安装的 scoop install tesseract和scoop install tesseract-languages）
+			为tesseract配置环境变量 在系统变量path中加上tesseract的目录 如L:\scoop\apps\tesseract\5.3.0.20221214
+		（2）下载 tessdata_best https://github.com/tesseract-ocr/tessdata_best traineddata可以不用全部下载只下需要的就行如简中是chi_sim.traineddata 繁中是chi_tra.traineddata 带vert是垂直识别的我们用不上
+		（3）下载 langdata_lstm https://github.com/tesseract-ocr/langdata_lstm 只需要你需要的那个语言的文件夹内的全部内容和radical-stroke.txt
+		（4）配置好环境变量 用户变量 TESSDATA_PREFIX 指向tessdata_best所在的文件夹
+		PS:如果是用scoop install 安装的 tesseract-languages其实就是tessdata_best，环境变量也会自动配好
+		(5)下载jTessBoxEditorFX 用于创建tif和修改box文件 https://sourceforge.net/projects/vietocr/files/jTessBoxEditor/
+			jTessBoxEditorFX需要java环境 https://www.java.com/en/download/manual.jsp 这里下载JRE
+			好像现在java安装自动会配一个环境变量javapath在系统变量path里面，不放心的话就在系统变量path里面再添加一项 如 C:\Program Files\Java\jre-1.8\bin 反正指向jre的bin就好
+	2.准备工作目录
+		（1）假设工作目录放在D:\ocr文件夹
+		D:\ocr
+		├─langdata_lstm 将第一步下载的langdata_lstm放在这里
+		├─output		新建空文件夹
+		├─tessdata_best	将你需要训练的语言文件放在这里 如chi_sim.traineddata或chi_tra.traineddata
+		└─jTessBoxEditorFX
+	3.训练
+		在tesseract提供的预训练数据上继续进行训练，chi_sim中缺少某些字符 我们需要自己加入(chi_tra我没有试过 反正一样处理一下也没问题，这里拿chi_sim距离 要训练繁体 自行替换为chi_tra)
+		（1）命令行输入 combine_tessdata -u d:\ocr\tessdata_best\chi_sim.traineddata d:\ocr\tessdata_best\chi_sim 将tessdata解包
+		（2）转化dawg字典文件为文本文件（Directed Acyclic Word Graph）
+			文字字典：
+			dawg2wordlist d:\ocr\tessdata_best\chi_sim.lstm-unicharset d:\ocr\tessdata_best\chi_sim.lstm-word-dawg d:\ocr\tessdata_best\word.txt
+			数字字典：
+			dawg2wordlist d:\ocr\tessdata_best\chi_sim.lstm-unicharset d:\ocr\tessdata_best\chi_sim.lstm-number-dawg d:\ocr\tessdata_best\number.txt
+			标点符号字典：
+			dawg2wordlist d:\ocr\tessdata_best\chi_sim.lstm-unicharset d:\ocr\tessdata_best\chi_sim.lstm-punc-dawg d:\ocr\tessdata_best\punc.txt
+		（3）生成字符集lstm-unicharset文件
+			生成字符集txt文件把字符集所要包含的数字、字母、标点符号和汉字，保存在d:\ocr\chi_sim.txt，要求无重复内容，并且中间无空格、回车换行或类似tab等无法显示的特殊符号，本例子中编辑了一些数字、字符、标点符号和汉字一共275个，请记住这个数字，下面还要用到这个数字。unicharset_extractor --norm_mode 3 --output_unicharset d:\ocr\chi_sim.lstm-unicharset d:\ocr\chi_sim.txt
+			chi_sim.txt我会在网盘里传一份，tra的对着做一份就好
+		（4）生成字典文本文件
+			参考d:\ocr\tessdata_best文件夹中的3个字典文件（word文字，number数字，punc标点符号），编辑自己的3个字典文件，分别为d:\ocr\word.txt，d:\ocr\number.txt和d:\ocr\punc.txt，punc.txt和number.txt用的是tessdata_best中的字典文件转化来的，word.txt按实际需要生成，3个字典都是每条内容占1行,word.txt我会在网盘里提供一份简中的，其实内容就是所有技能名各占一行 punc.txt和number.txt直接用（2）里面解出来的就行
+		（5）生成starter traineddata文件
+			combine_lang_model --input_unicharset d:\ocr\chi_sim.lstm-unicharset --lang chi_sim --script_dir d:\ocr\langdata_lstm --output_dir d:\ocr --version_str "CAS:watt:2023.03[1,48,0,1C3,3Ft16Mp3,3TxyLfys64Lfx96RxLrx96Lfx512O1c278]" --words d:\ocr\word.txt --numbers d:\ocr\number.txt --puncs d:\ocr\punc.txt --pass_through_recoder
+			CAS:watt:2023.03这个可以随便改 后面方括号里面的东西 是网络的参数 看最后c278 这里278就是前面（3）当中的计数+3 如果以后有新的技能加进来 字符相应变多的话 这个数字要匹配 其他的参数就不要动了
+		（6）查看新生成的starter traineddata信息 combine_tessdata -d d:\ocr\chi_sim\chi_sim.traineddata
+		（7）生成图片+box训练文件
+			这里我一开始是用字体 和技能文本直接生成了 图片 但是效果不是最好
+			后来我直接用游戏截图切片来做训练材料
+			在MHRAuto目录下建立wrong文件夹，将下载的chi_sim.traineddata 重命名为mhr.traineddata放在MHRAuto中的tessdata_fast文件夹里
+			用img2csv处理
+			应该所有的技能都会识别错误
+			wrong文件夹里会有很多，每个技能只选一张图就好 其他直接删掉
+			有些技能怪异炼化是炼不出来的但是会扣 那些技能也不是很常见 我选择用字体直接生成的图片作为那些技能的训练材料（有一说一带那种技能的装备大部分都没啥用 什么捕获名人 剥取铁人 地质学啥的）
+			狂化到是 属于炼不出 但是会扣 又很常见的 可以放一点带狂化-炼化的截图在ScreenShot里
+			jTessBoxEditorFX以其目录下的train.bat启动 或者直接双击他那个jar文件也行
+			用jTessBoxEditorFX将选出来的图片合成为一个tif train.tif放在d:\ocr 顶部菜单的tools中的merge tiff右下角文件类型选all image file不然默认是tif 看不到那些图片
+			用tesseract d:\ocr\train.tif train -l chi_sim --dpi 96 --psm 7 batch.nochop makebox生成一个box文件
+			用jTessBoxEditor打开box文件 然后对其进行修正 选项卡选Box Editor
+			Open 选train.tif 他就会打开train.tif和train.box进行对照
+			在box coordinates中选一条字符以后切到box view就可以看到具体情况了 推荐将margins设置为0这样看起来清除一点 设置为0以后显示的部分就是数据区域 scales设置大一点 看的清除 然后用qerf这几个快捷键对box进行修正具体快捷键的作用在help中有介绍
+			如果box coordinates中的字符少或者错误 就在那边进行修改 双击条目编辑 回车完成编辑 右边insert增加字符 delete删除当前字符
+			推荐先把box coordinates中的字符都弄对了 再去box view挨个修正范围 < >键可以前后翻字符 所有的快捷键在中文状态下都不生效 记得把输入法切成英文模式
+			都改完了记得save
+			不过如果是这样 来做训练文件的话 非常耗时 因为生成的box 基本不会有对的
+			我采用的方法是先用字体和技能文本生成图片和box 进行训练
+			拿训练好的模型对真实的截图来生成box
+			这个box相对而言 要改的就会少很多
+			然后拿这个不要继续训练 直接重新训练
+			用于生成的python脚本和字体文件我也会一并上传网盘
+			text2image生成图片，默认路径为d:\ocr\image\ 请先创建好image文件夹
+			text2box生成box文件 这个只是很死板的 编了一个box出来 如果你更改了text2image里生成的字体的大小之类的参数 那这个生成的box就对不上了 请自行验证，输出的box默认文件名为example.box box文件和tif文件的文件名需要一致
+		（8）生成训练文件
+			tesseract d:\ocr\train.tif d:\ocr\train -l chi_sim --psm 7 --dpi 96 lstm.train
+			我自己1080p下面截到的图dpi是96，如果你的不是可以更改 但是img2csv识别的时候我把dpi设定为了96写死在里面了，不太清楚是否会有影响
+			如果这一步有问题的话 去tesseract的安装目录下的tessdata\configs文件夹下看是否有lstm.train这个文件 我也会把整个configs文件夹上传网盘
+			或者在 https://github.com/tesseract-ocr/tessdata_best tessconfigs点进去configs点进去configs再点进去这里就是需要的文件
+			正常安装tesseract应该是有的 万一没有就这么解决一下
+		（9）新建训练列表文件
+			新建d:\ocr\train_listfile.txt文件，内容是d:\ocr\train.lstmf，如果有多个训练文件就分多行，但是要注意不要使用回车换行，只能是换行，就是不要用\r\n，只使用\n，即16进制方式不能是0d 0a只能是0a不然会报错，不明白什么回车换行和换行的区别的只能自己弄明白了。
+		（10）训练
+			cmd或Power Shell转为UTF8编码，否则中文显示乱码 chcp 65001
+			power shell不行的话 可以参照本文 https://blog.csdn.net/weixin_44358931/article/details/124954728 中的3.3推荐
+			替换顶层训练（我们在tesseract训练好的data基础上继续进行训练）：
+			lstmtraining --continue_from d:\ocr\tessdata_best\chi_sim.lstm --traineddata d:\ocr\chi_sim\chi_sim.traineddata --model_output d:\ocr\output\output --train_listfile d:\ocr\train_listfile.txt --max_iterations 0 --target_error_rate 0.01 --debug_interval -1 --append_index 5 --net_spec '[Lfx512O1c278]'
+		（11）停止与继续训练 运行的程序可以关闭，停止后可以用“开始训练”同样的命令继续训练。
+		（12）达成目标会自动停止
+		（13）生成整数型的traineddata文件(整数型模型是无法继续训练的，浮点型模型可以继续训练)
+			lstmtraining --stop_training --convert_to_int --continue_from d:\ocr\output\output_checkpoint --traineddata d:\ocr\chi_sim\chi_sim.traineddata --model_output d:\ocr\output\mhr.traineddata
+		（14）将mhr.traineddata放到MHRAuto中的tessdata_fast
+		至此 训练完成
+		（如模型还需要进一步修正可以参照此处）在MHRAuto目录下建立wrong文件夹，img2csv识别过程中错误的切片都会在这里，可以将这些图片继续拿来训练，将他们做成tif 然后用tesseract命令生成box文件，这次可以用-l mhr（将mhr.traineddata放到用户变量 TESSDATA_PREFIX 指向的tessdata_best所在的文件夹中）后续步骤都一样 只有最后训练使用的命令不同 因为已经替换过顶层了 所以继续训练的时候不需要替换
+		这时生成box文件可用mhr来进行初步识别 用tesseract d:\ocr\wrong.tif d:\ocr\wrong -l mhr --dpi 96 --psm 7 batch.nochop makebox 如果失败的话记得把mhr.traineddata复制一份到环境变量TESSDATA_PREFIX的目录下
+		生成lstmf文件也可使用mhr tesseract d:\ocr\wrong.tif d:\ocr\wrong -l mhr --psm 7 --dpi 96 lstm.train
+		lstmtraining d:\ocr\chi_sim\chi_sim.traineddata --net_spec "[1,48,0,1Ct3,3,16Mp3,3Lfys64Lfx96Lrx96Lfx512O1c278]" --model_output d:\ocr\output\output --train_listfile d:\ocr\train_listfile.txt --max_iterations 0 --target_error_rate 0.01 --debug_interval -1 --continue_from d:\ocr\output\output_checkpoint
+		完成后生成整数型traineddata文件的命令一样
+		
